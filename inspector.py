@@ -50,8 +50,31 @@ class Player():
         # work
         data = question["data"]
         game_state = question["game state"]
+        room = self.parse_room(game_state)
+        result = self.chose_answer(room, game_state)
         # log
+        print(f"{question['question type']}")
+        return result
+
+    def chose_answer(self, room, game_state):
         return 0
+
+    def parse_room(self, game_state):
+        result = []
+        for i in range(10):
+            room = {}
+            character = []
+            for j in range(len(game_state['characters'])):
+                if game_state['characters'][j]['position'] == i:
+                    character.append(game_state['characters'][j])
+            if game_state['shadow'] == i:
+                character.append({'color': 'shadow', 'suspect': False, 'position': i, 'power': False})
+            room["salle"] = i
+            room["nbr_character"] = len(character)
+            room["character"] = character
+            room["connected"] = [i+1, i+2]
+            result.append(room)
+        return result
 
     def handle_json(self, data):
         data = json.loads(data)
