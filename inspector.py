@@ -32,6 +32,9 @@ inspector_logger.addHandler(stream_handler)
 
 
 class Player():
+    move = ''
+    character = {}
+    rooms = {}
 
     def __init__(self):
 
@@ -46,18 +49,124 @@ class Player():
     def reset(self):
         self.socket.close()
 
-    def answer(self, question):
-        # work
-        data = question["data"]
-        game_state = question["game state"]
-        room = self.parse_room(game_state)
-        result = self.chose_answer(room, game_state)
-        # log
-        print(f"{question['question type']}")
-        return result
+    def select_character(self, answer):
+        isolate, group = self.chose_strategy()
+        if isolate > group:
+            self.move = 'group'
+            for room in self.rooms:
+                if room['nbr_character'] == 1 or room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color'] and character['suspect']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
+                if room['nbr_character'] > 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
+                if room['nbr_character'] == 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color'] and character['suspect']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
+                if room['nbr_character'] == 1 or room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                self.character = character
+                                return self.character
+            return answer[0]
+        elif group > isolate:
+            self.move = 'isolate'
+            for room in self.rooms:
+                if room['nbr_character'] == 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color'] and character['suspect']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
+                if room['nbr_character'] >= 1 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color'] and character['suspect']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
+                if room['nbr_character'] == 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                for char in room['character']:
+                                    if char['suspect'] and character['color'] != room_char['color']:
+                                        self.character = character
+                                        return self.character
+            for room in self.rooms:
+                if room['nbr_character'] >= 1 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                self.character = character
+                                return self.character
+        else:
+            self.character = answer[0]
+            for char in answer:
+                if char['suspect']:
+                    self.character = char
+            for room in self.rooms:
+                for character in room['character']:
+                    if character['color'] == self.character['color']:
+                        if room['nbr_character'] > 1 and not room['shadow']:
+                            self.move = 'still group'
+                        else:
+                            self.move = 'still isolate'
+            return self.character
 
-    def chose_answer(self, room, game_state):
-        return 0
+    def select_room_with_character(self, answers):
+        for answer in answers:
+            if self.rooms[answer]["nbr_character"] == 1 and self.rooms[answer]["character"][0]["suspect"] and not self.rooms[answer]["shadow"]:
+                return answer
+        for answer in answers:
+            if self.rooms[answer]["nbr_character"] >= 1 and not self.rooms[answer]["shadow"]:
+                return answer
+        return answers[0]
+
+    def select_room_without_character(self, answers):
+        for answer in answers:
+            if self.rooms[answer]["nbr_character"] == 0:
+                return answer
+        for answer in answers:
+            if self.rooms[answer]["shadow"]:
+                return answer
+        return answers[0]
+
+    def select_position(self, answer):
+        if self.move == 'group' or self.move == 'still group':
+            return self.select_room_with_character(answer)
+        elif self.move == 'isolate' or self.move == 'still isolate':
+            return self.select_room_without_character(answer)
+        else:
+            return answer[0]
+
+    def chose_strategy(self):
+        isolate = 0
+        group = 0
+        for room in self.rooms:
+            if room["nbr_character"] == 1 or room['shadow']:
+                for character in room["character"]:
+                    if character["suspect"]:
+                        isolate += 1
+            else:
+                for character in room["character"]:
+                    if character["suspect"]:
+                        group += 1
+        return isolate, group
 
     def parse_room(self, game_state):
         result = []
@@ -68,12 +177,76 @@ class Player():
                 if game_state['characters'][j]['position'] == i:
                     character.append(game_state['characters'][j])
             if game_state['shadow'] == i:
-                character.append({'color': 'shadow', 'suspect': False, 'position': i, 'power': False})
+                room["shadow"] = True
+            else:
+                room["shadow"] = False
             room["salle"] = i
             room["nbr_character"] = len(character)
             room["character"] = character
-            room["connected"] = [i+1, i+2]
             result.append(room)
+        return result
+
+    def set_shadow(self, answer):
+        isolate, group = self.chose_strategy()
+        if isolate > group:
+            i = 0
+            for room in self.rooms:
+                if room['nbr_character'] == 0:
+                    return answer[i]
+                i += 1
+        elif group > isolate:
+            i = 0
+            for room in self.rooms:
+                if room['nbr_character'] >= 2:
+                    for char in room['character']:
+                        if char['suspect']:
+                            return i
+                i += 1
+        else:
+            i = 0
+            for room in self.rooms:
+                if room['shadow']:
+                    return i
+                i += 1
+        return 0
+
+    def chose_answer(self, question_type, answer, game_state):
+        if question_type == 'select character':
+            self.rooms = self.parse_room(game_state)
+            print('=================================\nNEW ACTION:')
+            print(question_type)
+            from pprint import pprint
+            pprint(self.rooms)
+            print(self.chose_strategy())
+            return self.select_character(answer)
+        elif 'activate' in question_type and 'power' in question_type:
+            print(question_type)
+            return answer[0]
+        elif question_type == 'select position':
+            print(question_type)
+            return self.select_position(answer)
+        elif question_type == 'grey character power':
+            self.rooms = self.parse_room(game_state)
+            from pprint import pprint
+            print(question_type)
+            pprint(self.rooms)
+            return self.set_shadow(answer)
+        elif 'character power' in question_type:
+            return 0
+        return answer[0]
+
+    def answer(self, question):
+        answer = question["data"]
+        game_state = question["game state"]
+        result = self.chose_answer(question['question type'], answer, game_state)
+        print('answer :', result)
+        if 'activate' in question['question type'] and 'power' in question['question type']:
+            print('END ACTION\n=================================\n')
+        i = 0
+        for ans in answer:
+            if ans == result:
+                return i
+            i += 1
         return result
 
     def handle_json(self, data):
