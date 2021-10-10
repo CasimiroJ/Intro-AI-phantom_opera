@@ -68,13 +68,6 @@ class Player():
                                 self.character = character
                                 return self.character
             for room in self.rooms:
-                if room['nbr_character'] == 2 and not room['shadow']:
-                    for character in answer:
-                        for room_char in room['character']:
-                            if character['color'] == room_char['color'] and character['suspect']:
-                                self.character = character
-                                return self.character
-            for room in self.rooms:
                 if room['nbr_character'] == 1 or room['shadow']:
                     for character in answer:
                         for room_char in room['character']:
@@ -104,7 +97,7 @@ class Player():
                         for room_char in room['character']:
                             if character['color'] == room_char['color']:
                                 for char in room['character']:
-                                    if char['suspect'] and character['color'] != room_char['color']:
+                                    if char['suspect'] and char['color'] != room_char['color']:
                                         self.character = character
                                         return self.character
             for room in self.rooms:
@@ -114,6 +107,7 @@ class Player():
                             if character['color'] == room_char['color']:
                                 self.character = character
                                 return self.character
+            return answer[0]
         else:
             self.character = answer[0]
             for char in answer:
@@ -213,35 +207,20 @@ class Player():
     def chose_answer(self, question_type, answer, game_state):
         if question_type == 'select character':
             self.rooms = self.parse_room(game_state)
-            print('=================================\nNEW ACTION:')
-            print(question_type)
-            from pprint import pprint
-            pprint(self.rooms)
-            print(self.chose_strategy())
             return self.select_character(answer)
         elif 'activate' in question_type and 'power' in question_type:
-            print(question_type)
             return answer[0]
         elif question_type == 'select position':
-            print(question_type)
             return self.select_position(answer)
         elif question_type == 'grey character power':
             self.rooms = self.parse_room(game_state)
-            from pprint import pprint
-            print(question_type)
-            pprint(self.rooms)
             return self.set_shadow(answer)
-        elif 'character power' in question_type:
-            return 0
         return answer[0]
 
     def answer(self, question):
         answer = question["data"]
         game_state = question["game state"]
         result = self.chose_answer(question['question type'], answer, game_state)
-        print('answer :', result)
-        if 'activate' in question['question type'] and 'power' in question['question type']:
-            print('END ACTION\n=================================\n')
         i = 0
         for ans in answer:
             if ans == result:
@@ -252,7 +231,6 @@ class Player():
     def handle_json(self, data):
         data = json.loads(data)
         response = self.answer(data)
-        # send back to server
         bytes_data = json.dumps(response).encode("utf-8")
         protocol.send_json(self.socket, bytes_data)
 

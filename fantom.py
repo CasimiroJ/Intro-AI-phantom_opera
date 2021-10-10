@@ -51,7 +51,7 @@ class Player():
 
     def select_character(self, answer):
         isolate, group = self.chose_strategy()
-        if isolate < group:
+        if group > isolate:
             self.move = 'group'
             for room in self.rooms:
                 if room['nbr_character'] == 1 or room['shadow']:
@@ -61,13 +61,21 @@ class Player():
                                 self.character = character
                                 return self.character
             for room in self.rooms:
+                if room['nbr_character'] > 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                self.character = character
+                                return self.character
+            for room in self.rooms:
                 if room['nbr_character'] == 1 or room['shadow']:
                     for character in answer:
                         for room_char in room['character']:
                             if character['color'] == room_char['color']:
                                 self.character = character
                                 return self.character
-        elif group < isolate:
+            return answer[0]
+        elif isolate > group:
             self.move = 'isolate'
             for room in self.rooms:
                 if room['nbr_character'] == 2 and not room['shadow']:
@@ -84,12 +92,22 @@ class Player():
                                 self.character = character
                                 return self.character
             for room in self.rooms:
+                if room['nbr_character'] == 2 and not room['shadow']:
+                    for character in answer:
+                        for room_char in room['character']:
+                            if character['color'] == room_char['color']:
+                                for char in room['character']:
+                                    if char['suspect'] and char['color'] != room_char['color']:
+                                        self.character = character
+                                        return self.character
+            for room in self.rooms:
                 if room['nbr_character'] >= 1 and not room['shadow']:
                     for character in answer:
                         for room_char in room['character']:
                             if character['color'] == room_char['color']:
                                 self.character = character
                                 return self.character
+            return answer[0]
         self.character = answer[0]
         for char in answer:
             if char['suspect']:
@@ -161,6 +179,24 @@ class Player():
             result.append(room)
         return result
 
+    def set_shadow(self, answer):
+        isolate, group = self.chose_strategy()
+        if group > isolate:
+            i = 0
+            for room in self.rooms:
+                if room['nbr_character'] == 0:
+                    return answer[i]
+                i += 1
+        else:
+            i = 0
+            for room in self.rooms:
+                if room['nbr_character'] >= 2:
+                    for char in room['character']:
+                        if char['suspect']:
+                            return i
+                i += 1
+        return 0
+
     def chose_answer(self, question_type, answer, game_state):
         if question_type == 'select character':
             self.rooms = self.parse_room(game_state)
@@ -169,18 +205,28 @@ class Player():
             return answer[0]
         elif question_type == 'select position':
             return self.select_position(answer)
+        elif question_type == 'grey character power':
+            self.rooms = self.parse_room(game_state)
+            return self.set_shadow(answer)
         return answer[0]
 
     def answer(self, question):
         answer = question["data"]
         game_state = question["game state"]
         result = self.chose_answer(question['question type'], answer, game_state)
+        print(question['question type'])
+        print(self.chose_strategy())
+        print(result)
+        i = 0
+        for ans in answer:
+            if ans == result:
+                return i
+            i += 1
         return result
 
     def handle_json(self, data):
         data = json.loads(data)
         response = self.answer(data)
-        # send back to server
         bytes_data = json.dumps(response).encode("utf-8")
         protocol.send_json(self.socket, bytes_data)
 
